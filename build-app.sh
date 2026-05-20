@@ -1,24 +1,53 @@
 #!/bin/bash
 
-echo "Building Kyte YouTube Downloader app bundle..."
+set -euo pipefail
 
-# Remove old app bundle if it exists
-if [ -d "Kyte YouTube Downloader.app" ]; then
-    echo "Removing old app bundle..."
+TARGET="${1:-macos}"
+APP_VERSION="${APP_VERSION:-local}"
+APP_COMMIT="${APP_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo dev)}"
+LDFLAGS="-s -w -X main.AppVersion=${APP_VERSION} -X main.AppCommit=${APP_COMMIT}"
+
+build_macos() {
+    echo "Building macOS app bundle..."
     rm -rf "Kyte YouTube Downloader.app"
-fi
+    go run gioui.org/cmd/gogio@latest \
+        -target macos \
+        -arch arm64 \
+        -appid com.kytelearning.ytdownloader \
+        -icon icon.png \
+        -ldflags "${LDFLAGS}" \
+        -o "Kyte YouTube Downloader.app" \
+        .
+    echo "macOS app bundle created: Kyte YouTube Downloader.app"
+}
 
-# Build new app bundle with icon
-echo "Creating new app bundle..."
-gogio -target macos -arch arm64 -icon icon.png -o "Kyte YouTube Downloader.app" .
+build_windows() {
+    echo "Building Windows x64 executable..."
+    mkdir -p dist
+    go run gioui.org/cmd/gogio@latest \
+        -target windows \
+        -arch amd64 \
+        -appid com.kytelearning.ytdownloader \
+        -icon icon.png \
+        -ldflags "${LDFLAGS}" \
+        -o "dist/Kyte YouTube Downloader.exe" \
+        .
+    echo "Windows executable created: dist/Kyte YouTube Downloader.exe"
+}
 
-if [ $? -eq 0 ]; then
-    echo "✅ App bundle created successfully!"
-    echo "📱 You can now:"
-    echo "   • Open the app: open 'Kyte YouTube Downloader.app'"
-    echo "   • Copy to Applications: cp -r 'Kyte YouTube Downloader.app' /Applications/"
-    echo "   • Double-click in Finder to launch"
-else
-    echo "❌ Build failed!"
-    exit 1
-fi
+case "${TARGET}" in
+    macos)
+        build_macos
+        ;;
+    windows)
+        build_windows
+        ;;
+    all)
+        build_macos
+        build_windows
+        ;;
+    *)
+        echo "Usage: $0 [macos|windows|all]"
+        exit 1
+        ;;
+esac

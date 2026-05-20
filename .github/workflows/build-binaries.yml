@@ -1,0 +1,106 @@
+name: Build Binaries
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-binaries-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            os: macos-latest
+            artifact: kyte-yt-downloader-macos-arm64
+          - name: Windows x64
+            os: windows-latest
+            artifact: kyte-yt-downloader-windows-x64
+
+    env:
+      APP_VERSION: main-${{ github.run_number }}
+      APP_COMMIT: ${{ github.sha }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Build macOS app
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p dist
+          go run gioui.org/cmd/gogio@latest \
+            -target macos \
+            -arch arm64 \
+            -appid com.kytelearning.ytdownloader \
+            -icon icon.png \
+            -ldflags "-s -w -X main.AppVersion=${APP_VERSION} -X main.AppCommit=${APP_COMMIT}" \
+            -o "dist/Kyte YouTube Downloader.app" \
+            .
+          ditto -c -k --sequesterRsrc --keepParent "dist/Kyte YouTube Downloader.app" "dist/kyte-yt-downloader-macos-arm64.zip"
+
+      - name: Build Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          go run gioui.org/cmd/gogio@latest `
+            -target windows `
+            -arch amd64 `
+            -appid com.kytelearning.ytdownloader `
+            -icon icon.png `
+            -ldflags "-s -w -X main.AppVersion=$env:APP_VERSION -X main.AppCommit=$env:APP_COMMIT" `
+            -o "dist/Kyte YouTube Downloader.exe" `
+            .
+          Compress-Archive -Path "dist/Kyte YouTube Downloader.exe" -DestinationPath "dist/kyte-yt-downloader-windows-x64.zip" -Force
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish latest release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Download binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete latest --cleanup-tag -y || true
+          gh release create latest dist/*.zip \
+            --target "$GITHUB_SHA" \
+            --title "Latest main build" \
+            --notes "Automated binaries from $GITHUB_SHA."

@@ -1,4 +1,7 @@
 .DS_Store
 *.app/
+*.exe
+*.syso
+dist/
 yt-downloader
 kyte-yt-downloader
