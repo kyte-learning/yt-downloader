@@ -2,6 +2,8 @@ package main
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -186,14 +188,17 @@ func (a *App) ensureFFmpegZipBinary(binaryName, downloadURL string, metadata *ma
 
 	remoteInfo, err := fetchRemoteFileInfo(downloadURL)
 	if err != nil {
-		return err
+		if !missing {
+			return nil
+		}
+	} else {
+		version := remoteInfo.VersionKey()
+		if !missing && metadata.Version == version {
+			return nil
+		}
 	}
 
 	version := remoteInfo.VersionKey()
-	if !missing && metadata.Version == version {
-		return nil
-	}
-
 	a.setStatus("Checking for updates...", fmt.Sprintf("Downloading %s...", binaryName))
 	archivePath := filepath.Join(a.appDir, binaryName+".zip")
 	if err := downloadFile(downloadURL, archivePath); err != nil {
@@ -203,6 +208,13 @@ func (a *App) ensureFFmpegZipBinary(binaryName, downloadURL string, metadata *ma
 
 	if err := a.extractBinariesFromZip(archivePath, []string{binaryName}); err != nil {
 		return err
+	}
+	if version == "" {
+		checksum, err := fileSHA256(archivePath)
+		if err != nil {
+			return err
+		}
+		version = "sha256:" + checksum
 	}
 
 	*metadata = managedDependency{
@@ -465,6 +477,20 @@ func downloadFile(url, destination string) error {
 	}
 
 	return os.Rename(tempPath, destination)
+}
+
+func fileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func newHTTPRequest(method, url string) (*http.Request, error) {
