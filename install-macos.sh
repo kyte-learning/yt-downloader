@@ -37,16 +37,19 @@ fi
 echo "Removing macOS quarantine attribute..."
 xattr -dr com.apple.quarantine "${APP_SOURCE}" 2>/dev/null || true
 
-INSTALL_CMD=()
-if [[ ! -w "${INSTALL_DIR}" ]]; then
-    INSTALL_CMD=(sudo)
-fi
+run_installer_command() {
+    if [[ -w "${INSTALL_DIR}" ]]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
 
 echo "Installing to ${INSTALL_PATH}..."
 osascript -e "quit app \"${APP_NAME}\"" >/dev/null 2>&1 || true
-"${INSTALL_CMD[@]}" rm -rf "${INSTALL_PATH}"
-"${INSTALL_CMD[@]}" ditto "${APP_SOURCE}" "${INSTALL_PATH}"
-"${INSTALL_CMD[@]}" xattr -dr com.apple.quarantine "${INSTALL_PATH}" 2>/dev/null || true
+run_installer_command rm -rf "${INSTALL_PATH}"
+run_installer_command ditto "${APP_SOURCE}" "${INSTALL_PATH}"
+run_installer_command xattr -dr com.apple.quarantine "${INSTALL_PATH}" 2>/dev/null || true
 
 echo "Opening ${APP_NAME}..."
 open "${INSTALL_PATH}"
