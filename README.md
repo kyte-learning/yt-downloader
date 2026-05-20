@@ -33,6 +33,14 @@ Pushing to `main` runs `.github/workflows/build-binaries.yml` automatically.
 - Publishes both files to a stable `latest` GitHub Release
 - Embeds `AppVersion` and `AppCommit` so the app can detect and install newer `main` builds
 
+## macOS Install
+
+Run this one-liner on Apple Silicon macOS to download the latest build, install it into `/Applications`, remove the quarantine attribute, and open the app:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/kyte-learning/yt-downloader/main/install-macos.sh)"
+```
+
 ## Self Updates
 
 On startup, release builds check the `latest` GitHub Release. If the release points at a newer commit, the app downloads the matching platform ZIP, stages it under `~/.kyte-yt-downloader/app-update/`, starts a small replacement helper, exits, and reopens the updated app.
